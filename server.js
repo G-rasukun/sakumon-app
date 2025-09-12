@@ -10,6 +10,12 @@ const Tesseract = require('tesseract.js');
 const app = express();
 const port = process.env.PORT || 3000;
 
+// uploadsディレクトリを作成
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 // OpenAI API設定
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here'
@@ -270,22 +276,70 @@ ${typeInstruction}
   "summary": "要点ノートの内容"
 }`;
     } else {
+        // ヤマ張り問題モード - 設定対応版
+        const questionCount = settings.questionCount || 3;
+        const difficulty = settings.difficulty || 'standard'; 
+        const questionType = settings.questionType || 'mixed';
         const subject = settings.subject || '学習内容';
         
+        let difficultyInstruction = '';
+        switch(difficulty) {
+            case 'basic':
+                difficultyInstruction = '基礎的な理解を確認するレベルの予想問題を作成してください。';
+                break;
+            case 'standard':
+                difficultyInstruction = '標準的なレベルの予想問題を作成してください。';
+                break;
+            case 'advanced':
+                difficultyInstruction = '応用力を問う高度なレベルの予想問題を作成してください。';
+                break;
+            case 'mixed':
+                difficultyInstruction = '基礎から応用まで様々なレベルの予想問題を混合して作成してください。';
+                break;
+        }
+        
+        let typeInstruction = '';
+        switch(questionType) {
+            case 'multiple':
+                typeInstruction = `四択問題形式で予想問題を作成してください。正解と3つの誤答選択肢を含めてください。
+
+問題は以下の形式で作成してください：
+問題文
+A) 選択肢1
+B) 選択肢2  
+C) 選択肢3
+D) 選択肢4`;
+                break;
+            case 'descriptive':
+                typeInstruction = '記述問題形式で予想問題を作成してください。論述や説明を求める問題にしてください。';
+                break;
+            case 'mixed':
+                typeInstruction = '四択問題と記述問題を組み合わせて予想問題を作成してください。';
+                break;
+        }
+        
         return baseInstruction + `
-【ヤマ張り問題モード】
+【じっくり対策モード】
 教科: ${subject}
+予想問題数: ${questionCount}問
+難易度: ${difficulty}
+出題形式: ${questionType}
+
+${difficultyInstruction}
+${typeInstruction}
 
 上記の過去問と授業教材を分析し、以下を作成してください：
 
 重要：著作権保護のため、既存の問題と同じものは絶対に作成しないでください。
 
 1. 関連性分析：過去問のパターンと授業内容の関連を分析
-2. 予想問題（3問）：
+2. 予想問題（${questionCount}問）：
    - 過去問のパターンを参考にした完全オリジナル問題
+   - 指定された難易度と形式に従った問題
    - 新しい視点・角度からの問題設定
+   - 各問題に詳細な解答・解説
 
-3. 解説：問題とは別に詳細な解説をまとめ
+3. 対策ノート：問題傾向と対策方法をまとめ
 
 必ず以下のJSONフォーマットで返してください：
 {
@@ -293,10 +347,11 @@ ${typeInstruction}
   "predictions": [
     {
       "question": "予想問題文",
-      "explanation": "出題予想理由と解説"
+      "answer": "解答",
+      "explanation": "出題予想理由と詳細解説"
     }
   ],
-  "notes": "補足説明"
+  "notes": "対策ノートの内容"
 }`;
     }
 }
@@ -429,8 +484,6 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'サーバーは正常に動作しています' });
 });
 
-// 既存のserver.jsの末尾（サーバー起動部分の前）に以下を追加
-
 // AI質問機能API
 app.post('/api/ai-question', async (req, res) => {
     try {
@@ -496,239 +549,14 @@ ${contextInfo}
     }
 });
 
-// 既存のcreatePrompt関数を修正（ヤマ張り問題の設定対応）
-function createPrompt(fileContents, mode, settings = {}) {
-    function processLargeContent(content, fileName) {
-        if (content.length <= 800) {
-            return content;
-        }
-        
-        const lines = content.split('\n');
-        const importantLines = [];
-        let currentLength = 0;
-        const maxLength = 600;
-        
-        const priorityLines = lines.filter(line => {
-            const trimmed = line.trim();
-            return trimmed.length > 5 && (
-                trimmed.includes('問題') || 
-                trimmed.includes('解答') || 
-                trimmed.includes('重要') ||
-                trimmed.includes('定義') ||
-                trimmed.includes('公式') ||
-                /第?\d+章|第?\d+節|第?\d+問/.test(trimmed) ||
-                /^\d+[\.\)]\s/.test(trimmed)
-            );
-        });
-        
-        for (const line of priorityLines) {
-            if (currentLength + line.length > maxLength) break;
-            importantLines.push(line);
-            currentLength += line.length;
-        }
-        
-        if (currentLength < maxLength * 0.8) {
-            for (const line of lines) {
-                if (priorityLines.includes(line)) continue;
-                if (line.trim().length < 10) continue;
-                if (currentLength + line.length > maxLength) break;
-                
-                importantLines.push(line);
-                currentLength += line.length;
-            }
-        }
-        
-        const result = importantLines.join('\n');
-        console.log(`${fileName}: ${content.length}文字 → ${result.length}文字に圧縮`);
-        
-        return result;
-    }
-    
-    const processedContent = fileContents.map(f => {
-        const processed = processLargeContent(f.content, f.name);
-        return `【${f.name}】\n${processed}\n`;
-    }).join('\n');
-    
-    const totalLength = processedContent.length;
-    console.log(`総処理文字数: ${totalLength}文字`);
-    
-    const baseInstruction = `
-あなたは教育専門のAIアシスタントです。以下の重要な制約を必ず守ってください：
-
-【著作権遵守の重要な注意事項】
-- 提供された資料と全く同じ問題や文章は絶対に作成しないでください
-- すべての内容はオリジナルで、元の資料とは異なる表現・構成にしてください
-- 同じ概念でも、異なる角度、異なる例、異なる問いかけで構成してください
-- 既存の問題の単純な改変ではなく、完全に新しい問題を作成してください
-
-ファイル内容：
-${processedContent}
-`;
-
-    if (mode === 'review') {
-        const questionCount = settings.questionCount || 5;
-        const difficulty = settings.difficulty || 'standard';
-        const questionType = settings.questionType || 'mixed';
-        const subject = settings.subject || '学習内容';
-        
-        let difficultyInstruction = '';
-        switch(difficulty) {
-            case 'basic':
-                difficultyInstruction = '基礎的な理解を確認するレベルの問題を作成してください。';
-                break;
-            case 'standard':
-                difficultyInstruction = '標準的なレベルの問題を作成してください。';
-                break;
-            case 'advanced':
-                difficultyInstruction = '応用力を問う高度なレベルの問題を作成してください。';
-                break;
-            case 'mixed':
-                difficultyInstruction = '基礎から応用まで様々なレベルの問題を混合して作成してください。';
-                break;
-        }
-        
-        let typeInstruction = '';
-        switch(questionType) {
-            case 'multiple':
-                typeInstruction = `四択問題形式で作成してください。正解と3つの誤答選択肢を含めてください。
-
-問題は以下の形式で作成してください：
-問題文
-A) 選択肢1
-B) 選択肢2  
-C) 選択肢3
-D) 選択肢4`;
-                break;
-            case 'descriptive':
-                typeInstruction = '記述問題形式で作成してください。論述や説明を求める問題にしてください。';
-                break;
-            case 'mixed':
-                typeInstruction = '四択問題と記述問題を組み合わせて作成してください。';
-                break;
-        }
-        
-        return baseInstruction + `
-【復習問題作成＆要点ノートモード】
-教科: ${subject}
-問題数: ${questionCount}問
-難易度: ${difficulty}
-出題形式: ${questionType}
-
-${difficultyInstruction}
-${typeInstruction}
-
-上記の内容を分析し、以下を作成してください：
-
-1. 復習問題（${questionCount}問）：
-   - 元の資料とは全く異なる新しい問題
-   - 指定された難易度と形式に従った問題
-   - 各問題に詳細な解答・解説
-
-2. 要点ノート：
-   - 重要概念を整理した構造的なまとめ
-   - 図表や例を用いた理解しやすい説明
-   - 元の資料とは異なる表現での要点整理
-
-必ず以下のJSONフォーマットで返してください：
-{
-  "questions": [
-    {
-      "question": "問題文",
-      "answer": "解答", 
-      "explanation": "詳細な解説"
-    }
-  ],
-  "summary": "要点ノートの内容"
-}`;
-    } else {
-        // ヤマ張り問題モード - 設定対応版
-        const questionCount = settings.questionCount || 3;
-        const difficulty = settings.difficulty || 'standard'; 
-        const questionType = settings.questionType || 'mixed';
-        const subject = settings.subject || '学習内容';
-        
-        let difficultyInstruction = '';
-        switch(difficulty) {
-            case 'basic':
-                difficultyInstruction = '基礎的な理解を確認するレベルの予想問題を作成してください。';
-                break;
-            case 'standard':
-                difficultyInstruction = '標準的なレベルの予想問題を作成してください。';
-                break;
-            case 'advanced':
-                difficultyInstruction = '応用力を問う高度なレベルの予想問題を作成してください。';
-                break;
-            case 'mixed':
-                difficultyInstruction = '基礎から応用まで様々なレベルの予想問題を混合して作成してください。';
-                break;
-        }
-        
-        let typeInstruction = '';
-        switch(questionType) {
-            case 'multiple':
-                typeInstruction = `四択問題形式で予想問題を作成してください。正解と3つの誤答選択肢を含めてください。
-
-問題は以下の形式で作成してください：
-問題文
-A) 選択肢1
-B) 選択肢2  
-C) 選択肢3
-D) 選択肢4`;
-                break;
-            case 'descriptive':
-                typeInstruction = '記述問題形式で予想問題を作成してください。論述や説明を求める問題にしてください。';
-                break;
-            case 'mixed':
-                typeInstruction = '四択問題と記述問題を組み合わせて予想問題を作成してください。';
-                break;
-        }
-        
-        return baseInstruction + `
-【じっくり対策モード】
-教科: ${subject}
-予想問題数: ${questionCount}問
-難易度: ${difficulty}
-出題形式: ${questionType}
-
-${difficultyInstruction}
-${typeInstruction}
-
-上記の過去問と授業教材を分析し、以下を作成してください：
-
-重要：著作権保護のため、既存の問題と同じものは絶対に作成しないでください。
-
-1. 関連性分析：過去問のパターンと授業内容の関連を分析
-2. 予想問題（${questionCount}問）：
-   - 過去問のパターンを参考にした完全オリジナル問題
-   - 指定された難易度と形式に従った問題
-   - 新しい視点・角度からの問題設定
-   - 各問題に詳細な解答・解説
-
-3. 対策ノート：問題傾向と対策方法をまとめ
-
-必ず以下のJSONフォーマットで返してください：
-{
-  "analysis": "関連性分析結果",
-  "predictions": [
-    {
-      "question": "予想問題文",
-      "answer": "解答",
-      "explanation": "出題予想理由と詳細解説"
-    }
-  ],
-  "notes": "対策ノートの内容"
-}`;
-    }
-}
-
 // ヘルスチェック用エンドポイント
 app.get('/healthz', (req, res) => {
     res.status(200).send('OK');
 });
 
-// healthz の下あたりに追加
+// ルートパス
 app.get('/', (req, res) => {
-  res.send('✅ サーバーは動いています！');
+    res.send('✅ サーバーは動いています！');
 });
 
 // サーバー起動
