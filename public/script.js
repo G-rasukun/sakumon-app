@@ -1,4 +1,7 @@
-const API_BASE_URL = 'http://localhost:3000/api';
+// 本番環境のAPIベースURLを自動検出
+const API_BASE_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3000/api' 
+    : '/api';
 
 // グローバル変数
 let uploadedFiles = [];
@@ -746,15 +749,6 @@ function createReviewHistorySection() {
                     </div>
                     
                     <div class="setting-group">
-                        <label for="reviewMode">復習モード:</label>
-                        <select id="reviewMode">
-                            <option value="latest">最新のセッション</option>
-                            <option value="random">ランダム出題</option>
-                            <option value="all">全問題から出題</option>
-                        </select>
-                    </div>
-                    
-                    <div class="setting-group">
                         <label for="reviewQuestionCount">出題数:</label>
                         <select id="reviewQuestionCount">
                             <option value="3">3問</option>
@@ -769,7 +763,7 @@ function createReviewHistorySection() {
             <div class="history-stats" id="historyStats"></div>
             
             <button class="generate-btn" id="startReviewBtn" onclick="startReviewSession()" disabled>
-                🔄 復習を開始
+                📄 復習を開始
             </button>
         </div>
         
@@ -1108,4 +1102,13 @@ function updateReviewStats(subject, questionCount) {
 
 // 初期化
 updateModeDisplay();
-updateGenerateButton();
+updateGenerateButton();Mode">復習モード:</label>
+                        <select id="reviewMode">
+                            <option value="latest">最新のセッション</option>
+                            <option value="random">ランダム出題</option>
+                            <option value="all">全問題から出題</option>
+                        </select>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label for="review
