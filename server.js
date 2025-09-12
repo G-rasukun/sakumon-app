@@ -721,8 +721,9 @@ ${typeInstruction}
     }
 }
 
-app.get('/', (req, res) => {
-  res.send('✅ サーバーは動作中です');
+// これなら React のルートを壊さない
+app.get('/healthz', (req, res) => {
+  res.send('✅ Server is healthy');
 });
 
 // サーバー起動
