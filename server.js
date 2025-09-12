@@ -726,7 +726,10 @@ app.get('/healthz', (req, res) => {
     res.status(200).send('OK');
 });
 
-
+// healthz の下あたりに追加
+app.get('/', (req, res) => {
+  res.send('✅ サーバーは動いています！');
+});
 
 // サーバー起動
 app.listen(port, () => {
