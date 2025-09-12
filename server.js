@@ -721,6 +721,10 @@ ${typeInstruction}
     }
 }
 
+app.get('/', (req, res) => {
+  res.send('✅ サーバーは動作中です');
+});
+
 // サーバー起動
 app.listen(port, () => {
     console.log(`🚀 AI学習アプリサーバーが起動しました`);
