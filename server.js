@@ -721,10 +721,12 @@ ${typeInstruction}
     }
 }
 
-// これなら React のルートを壊さない
+// ヘルスチェック用エンドポイント
 app.get('/healthz', (req, res) => {
-  res.send('✅ Server is healthy');
+    res.status(200).send('OK');
 });
+
+
 
 // サーバー起動
 app.listen(port, () => {
