@@ -19,7 +19,7 @@
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
             border-radius: 20px;
@@ -89,7 +89,6 @@
             line-height: 1.6;
         }
 
-        /* 設定パネル */
         .settings-panel {
             background: #f8f9fa;
             border-radius: 15px;
@@ -132,7 +131,6 @@
             border-color: #3498db;
         }
 
-        /* じっくり対策専用設定 */
         .yamabari-settings {
             display: none;
         }
@@ -149,35 +147,6 @@
             display: none;
         }
 
-        .upload-section {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .upload-group {
-            border: 2px dashed #3498db;
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            background: linear-gradient(145deg, #f8f9fa, #e9ecef);
-        }
-
-        .upload-group h4 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-
-        .upload-group.required {
-            border-color: #e74c3c;
-        }
-
-        .upload-group.optional {
-            border-color: #27ae60;
-        }
-
-        /* テキスト入力エリア */
         .text-input-area {
             background: #f8f9fa;
             border-radius: 15px;
@@ -193,7 +162,7 @@
 
         .text-input-area textarea {
             width: 100%;
-            min-height: 120px;
+            min-height: 200px;
             padding: 15px;
             border: 2px solid #ddd;
             border-radius: 10px;
@@ -205,55 +174,6 @@
         .text-input-area textarea:focus {
             outline: none;
             border-color: #3498db;
-        }
-
-        /* ファイルアップロード */
-        .file-upload-area {
-            border: 3px dashed #3498db;
-            border-radius: 15px;
-            padding: 40px;
-            text-align: center;
-            margin-bottom: 30px;
-            background: linear-gradient(145deg, #f8f9fa, #e9ecef);
-            transition: all 0.3s ease;
-        }
-
-        .file-upload-area:hover {
-            border-color: #2980b9;
-            background: linear-gradient(145deg, #e3f2fd, #bbdefb);
-        }
-
-        .file-upload-area.dragover {
-            border-color: #27ae60;
-            background: linear-gradient(145deg, #e8f5e8, #c8e6c9);
-        }
-
-        .upload-icon {
-            font-size: 3rem;
-            color: #3498db;
-            margin-bottom: 15px;
-        }
-
-        #fileInput, #pastExamInput, #materialInput {
-            display: none;
-        }
-
-        .upload-btn {
-            background: linear-gradient(135deg, #3498db, #2980b9);
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 1.1rem;
-            margin: 10px;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
-        }
-
-        .upload-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
         }
 
         .generate-btn {
@@ -282,45 +202,6 @@
             box-shadow: none;
         }
 
-        .file-list {
-            margin-top: 20px;
-        }
-
-        .file-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 15px;
-            background: linear-gradient(145deg, #ecf0f1, #bdc3c7);
-            border-radius: 10px;
-            margin-bottom: 10px;
-        }
-
-        .file-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .file-icon {
-            font-size: 1.5rem;
-        }
-
-        .remove-btn {
-            background: #e74c3c;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background 0.3s ease;
-        }
-
-        .remove-btn:hover {
-            background: #c0392b;
-        }
-
-        /* 結果表示エリア（2タブ構成） */
         .results-container {
             margin-top: 30px;
             display: none;
@@ -526,7 +407,6 @@
             font-style: italic;
         }
 
-        /* AI質問機能のスタイル */
         .ai-assistant {
             position: fixed;
             bottom: 20px;
@@ -646,6 +526,15 @@
             opacity: 0.9;
         }
 
+        .notice {
+            background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            color: #856404;
+        }
+
         @media (max-width: 768px) {
             .mode-selector {
                 flex-direction: column;
@@ -657,10 +546,6 @@
             
             .main-content {
                 padding: 20px;
-            }
-
-            .upload-section {
-                grid-template-columns: 1fr;
             }
 
             .settings-grid {
@@ -678,19 +563,24 @@
     <div class="container">
         <div class="header">
             <h1>🚀 サク問！</h1>
-            <p>AIがあなたの学習資料から最適な復習問題を自動生成します</p>
+            <p>AIがあなたの学習テキストから最適な復習問題を自動生成します</p>
         </div>
 
         <div class="main-content">
+            <div class="notice">
+                <strong>📝 テキスト入力版</strong><br>
+                現在はテキスト入力のみに対応しています。学習内容を下のテキストエリアに貼り付けて、AI問題生成をお試しください。
+            </div>
+
             <!-- モード選択 -->
             <div class="mode-selector">
                 <div class="mode-card active" data-mode="review">
                     <h3>📖 サクッと復習</h3>
-                    <p>授業資料を読み込んで、復習用の問題と要点ノートを作成します。理解度を深める新しい問題を生成します。</p>
+                    <p>学習テキストを入力して、復習用の問題と要点ノートを作成します。理解度を深める新しい問題を生成します。</p>
                 </div>
                 <div class="mode-card" data-mode="prediction">
                     <h3>🎯 じっくり対策</h3>
-                    <p>過去問と授業教材を分析して、今年のテスト問題を予想します。関連性を分析し、オリジナル問題を作成します。</p>
+                    <p>過去問と授業内容のテキストを分析して、今年のテスト問題を予想します。関連性を分析し、オリジナル問題を作成します。</p>
                 </div>
             </div>
 
@@ -781,49 +671,14 @@
                             </select>
                         </div>
                     </div>
-                    
-                    <div class="upload-section">
-                        <div class="upload-group required">
-                            <h4>📄 過去問（必須）</h4>
-                            <p class="info-text">過去の試験問題をアップロードしてください</p>
-                            <button class="upload-btn" onclick="document.getElementById('pastExamInput').click()">
-                                過去問を選択
-                            </button>
-                            <input type="file" id="pastExamInput" multiple accept=".txt,.pdf,.png,.jpg,.jpeg">
-                            <div id="pastExamList" class="file-list"></div>
-                        </div>
-                        
-                        <div class="upload-group optional">
-                            <h4>📚 教材（任意）</h4>
-                            <p class="info-text">教材がなくても解析可能ですが、より精度の高い予想が可能になります</p>
-                            <button class="upload-btn" onclick="document.getElementById('materialInput').click()">
-                                教材を選択
-                            </button>
-                            <input type="file" id="materialInput" multiple accept=".txt,.pdf,.png,.jpg,.jpeg">
-                            <div id="materialList" class="file-list"></div>
-                        </div>
-                    </div>
                 </div>
             </div>
 
             <!-- テキスト入力エリア -->
             <div class="text-input-area">
-                <h3>✏️ 追加のテキスト入力</h3>
-                <textarea id="additionalText" placeholder="追加で分析に含めたいテキストがあれば、こちらに入力してください。&#10;例：授業のメモ、重要なポイント、補足説明など..."></textarea>
-                <p class="info-text">ここに入力された内容も、ファイルと同様にAI分析に含まれます。</p>
-            </div>
-
-            <!-- ファイルアップロード（サクッと復習モード用） -->
-            <div id="reviewUpload" class="file-upload-area">
-                <div class="upload-icon">📖</div>
-                <h3>授業資料をアップロードしてください</h3>
-                <p>PDF、画像（PNG、JPG）、テキストファイルに対応</p>
-                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
-                    ファイルを選択
-                </button>
-                <p style="margin-top: 10px; color: #666;">または、ファイルをここにドラッグ&ドロップ</p>
-                <input type="file" id="fileInput" multiple accept=".txt,.pdf,.png,.jpg,.jpeg">
-                <div class="file-list" id="fileList"></div>
+                <h3>✏️ 学習内容を入力してください</h3>
+                <textarea id="additionalText" placeholder="ここに学習内容のテキストを貼り付けてください。&#10;&#10;例：&#10;- 授業のノート&#10;- 教科書の内容&#10;- 過去問とその解答&#10;- 重要なポイントのまとめ&#10;&#10;※ 複数の内容を組み合わせて入力することも可能です。"></textarea>
+                <p class="info-text">入力されたテキストを基にAIが問題を生成します。より多くの情報があると、より良い問題が作成できます。</p>
             </div>
 
             <button class="generate-btn" id="generateBtn" onclick="generateContent()">
@@ -834,10 +689,10 @@
 
             <div class="loading" id="loading">
                 <div class="spinner"></div>
-                <p>AIが学習資料を分析中です...<br>しばらくお待ちください</p>
+                <p>AIが学習内容を分析中です...<br>しばらくお待ちください</p>
             </div>
 
-            <!-- 2タブ構成の結果表示 -->
+            <!-- 結果表示 -->
             <div class="results-container" id="results">
                 <div class="results-tabs">
                     <button class="result-tab active" data-tab="questions">📝 問題・解説</button>
