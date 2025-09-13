@@ -1,20 +1,9 @@
 const express = require('express');
 const cors = require('cors');
-const multer = require('multer');
-const fs = require('fs');
-const path = require('path');
 const { OpenAI } = require('openai');
-const pdfParse = require('pdf-parse');
-const Tesseract = require('tesseract.js');
 
 const app = express();
 const port = process.env.PORT || 3000;
-
-// uploadsディレクトリを作成
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-}
 
 // OpenAI API設定
 const openai = new OpenAI({
@@ -26,167 +15,8 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
-// ファイルアップロード設定
-const upload = multer({
-    dest: 'uploads/',
-    limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB制限
-    },
-    fileFilter: (req, file, cb) => {
-        const allowedTypes = ['text/plain', 'application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
-        if (allowedTypes.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('対応していないファイル形式です'), false);
-        }
-    }
-});
-
-// ファイル内容読み込み関数（OCR改善版）
-async function readFileContent(filePath, mimeType) {
-    console.log(`ファイル処理開始: ${filePath}, タイプ: ${mimeType}`);
-    
-    if (mimeType === 'text/plain') {
-        const content = fs.readFileSync(filePath, 'utf8');
-        console.log(`テキスト内容（最初の100文字）: ${content.substring(0, 100)}`);
-        return content;
-    } else if (mimeType === 'application/pdf') {
-        try {
-            console.log('PDF処理開始...');
-            const pdfBuffer = fs.readFileSync(filePath);
-            const pdfData = await pdfParse(pdfBuffer);
-            const text = pdfData.text;
-            console.log(`PDF処理成功。テキスト長: ${text.length}文字`);
-            
-            if (text.trim().length === 0) {
-                return 'このPDFからテキストを抽出できませんでした。画像ベースのPDFの可能性があります。';
-            }
-            
-            return text;
-        } catch (error) {
-            console.error('PDF処理エラー:', error);
-            return `PDF処理エラーが発生しました: ${error.message}`;
-        }
-    } else if (mimeType.startsWith('image/')) {
-        try {
-            console.log('OCR処理開始（改善版）...');
-            
-            // 改善されたOCR設定
-            const { data: { text } } = await Tesseract.recognize(
-                filePath,
-                'jpn+eng',
-                {
-                    logger: m => {
-                        if (m.status === 'recognizing text') {
-                            console.log(`OCR進行状況: ${Math.round(m.progress * 100)}%`);
-                        }
-                    },
-                    // OCR精度向上設定
-                    tessedit_pageseg_mode: Tesseract.PSM.AUTO,
-                    tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
-                    preserve_interword_spaces: '1',
-                    textord_min_xheight: '10'
-                }
-            );
-            
-            console.log(`OCR処理完了。テキスト長: ${text.length}文字`);
-            
-            // 改善された後処理
-            let cleanedText = text
-                .replace(/\r\n/g, '\n')
-                .replace(/\r/g, '\n')
-                .replace(/\n\s*\n\s*\n/g, '\n\n')
-                .replace(/([あ-ん])\s+([あ-ん])/g, '$1$2')
-                .replace(/([ア-ン])\s+([ア-ン])/g, '$1$2')
-                .replace(/([一-龯])\s+([一-龯])/g, '$1$2')
-                .replace(/\s*=\s*/g, '=')
-                .replace(/\s*\+\s*/g, '+')
-                .replace(/\s*-\s*/g, '-')
-                .replace(/[|｜]/g, 'l')
-                .replace(/[０-９]/g, match => String.fromCharCode(match.charCodeAt(0) - 65248))
-                .replace(/[Ａ-Ｚａ-ｚ]/g, match => String.fromCharCode(match.charCodeAt(0) - 65248))
-                .replace(/^\s+/gm, '')
-                .replace(/\s+$/gm, '')
-                .replace(/\n{3,}/g, '\n\n')
-                .trim();
-            
-            if (cleanedText.trim().length === 0) {
-                return '画像からテキストを抽出できませんでした。画像の品質を確認してください。';
-            }
-            
-            const meaningfulChars = cleanedText.match(/[a-zA-Z0-9あ-んア-ン一-龯]/g);
-            const meaningfulRatio = meaningfulChars ? meaningfulChars.length / cleanedText.length : 0;
-            
-            if (meaningfulRatio < 0.1) {
-                return `画像からの文字認識精度が低い可能性があります。認識されたテキスト:\n${cleanedText}\n\n※より鮮明な画像での再試行をお勧めします。`;
-            }
-            
-            return `画像から抽出されたテキスト内容:\n${cleanedText}`;
-            
-        } catch (error) {
-            console.error('OCR処理エラー:', error);
-            return `画像処理エラー: ${error.message}`;
-        }
-    }
-    return '';
-}
-
-// プロンプト生成関数（テキスト量制限対応版）
-function createPrompt(fileContents, mode, settings = {}) {
-    function processLargeContent(content, fileName) {
-        if (content.length <= 800) {
-            return content;
-        }
-        
-        const lines = content.split('\n');
-        const importantLines = [];
-        let currentLength = 0;
-        const maxLength = 600;
-        
-        const priorityLines = lines.filter(line => {
-            const trimmed = line.trim();
-            return trimmed.length > 5 && (
-                trimmed.includes('問題') || 
-                trimmed.includes('解答') || 
-                trimmed.includes('重要') ||
-                trimmed.includes('定義') ||
-                trimmed.includes('公式') ||
-                /第?\d+章|第?\d+節|第?\d+問/.test(trimmed) ||
-                /^\d+[\.\)]\s/.test(trimmed)
-            );
-        });
-        
-        for (const line of priorityLines) {
-            if (currentLength + line.length > maxLength) break;
-            importantLines.push(line);
-            currentLength += line.length;
-        }
-        
-        if (currentLength < maxLength * 0.8) {
-            for (const line of lines) {
-                if (priorityLines.includes(line)) continue;
-                if (line.trim().length < 10) continue;
-                if (currentLength + line.length > maxLength) break;
-                
-                importantLines.push(line);
-                currentLength += line.length;
-            }
-        }
-        
-        const result = importantLines.join('\n');
-        console.log(`${fileName}: ${content.length}文字 → ${result.length}文字に圧縮`);
-        
-        return result;
-    }
-    
-    const processedContent = fileContents.map(f => {
-        const processed = processLargeContent(f.content, f.name);
-        return `【${f.name}】\n${processed}\n`;
-    }).join('\n');
-    
-    const totalLength = processedContent.length;
-    console.log(`総処理文字数: ${totalLength}文字`);
-    
+// プロンプト生成関数（テキストのみ版）
+function createPrompt(textContent, mode, settings = {}) {
     const baseInstruction = `
 あなたは教育専門のAIアシスタントです。以下の重要な制約を必ず守ってください：
 
@@ -196,8 +26,8 @@ function createPrompt(fileContents, mode, settings = {}) {
 - 同じ概念でも、異なる角度、異なる例、異なる問いかけで構成してください
 - 既存の問題の単純な改変ではなく、完全に新しい問題を作成してください
 
-ファイル内容：
-${processedContent}
+テキスト内容：
+${textContent}
 `;
 
     if (mode === 'review') {
@@ -276,47 +106,11 @@ ${typeInstruction}
   "summary": "要点ノートの内容"
 }`;
     } else {
-        // ヤマ張り問題モード - 設定対応版
+        // じっくり対策モード
         const questionCount = settings.questionCount || 3;
         const difficulty = settings.difficulty || 'standard'; 
         const questionType = settings.questionType || 'mixed';
         const subject = settings.subject || '学習内容';
-        
-        let difficultyInstruction = '';
-        switch(difficulty) {
-            case 'basic':
-                difficultyInstruction = '基礎的な理解を確認するレベルの予想問題を作成してください。';
-                break;
-            case 'standard':
-                difficultyInstruction = '標準的なレベルの予想問題を作成してください。';
-                break;
-            case 'advanced':
-                difficultyInstruction = '応用力を問う高度なレベルの予想問題を作成してください。';
-                break;
-            case 'mixed':
-                difficultyInstruction = '基礎から応用まで様々なレベルの予想問題を混合して作成してください。';
-                break;
-        }
-        
-        let typeInstruction = '';
-        switch(questionType) {
-            case 'multiple':
-                typeInstruction = `四択問題形式で予想問題を作成してください。正解と3つの誤答選択肢を含めてください。
-
-問題は以下の形式で作成してください：
-問題文
-A) 選択肢1
-B) 選択肢2  
-C) 選択肢3
-D) 選択肢4`;
-                break;
-            case 'descriptive':
-                typeInstruction = '記述問題形式で予想問題を作成してください。論述や説明を求める問題にしてください。';
-                break;
-            case 'mixed':
-                typeInstruction = '四択問題と記述問題を組み合わせて予想問題を作成してください。';
-                break;
-        }
         
         return baseInstruction + `
 【じっくり対策モード】
@@ -325,9 +119,6 @@ D) 選択肢4`;
 難易度: ${difficulty}
 出題形式: ${questionType}
 
-${difficultyInstruction}
-${typeInstruction}
-
 上記の過去問と授業教材を分析し、以下を作成してください：
 
 重要：著作権保護のため、既存の問題と同じものは絶対に作成しないでください。
@@ -335,7 +126,6 @@ ${typeInstruction}
 1. 関連性分析：過去問のパターンと授業内容の関連を分析
 2. 予想問題（${questionCount}問）：
    - 過去問のパターンを参考にした完全オリジナル問題
-   - 指定された難易度と形式に従った問題
    - 新しい視点・角度からの問題設定
    - 各問題に詳細な解答・解説
 
@@ -356,66 +146,15 @@ ${typeInstruction}
     }
 }
 
-// AI問題生成API
-app.post('/api/generate', upload.fields([
-    { name: 'files', maxCount: 10 },
-    { name: 'pastExamFiles', maxCount: 10 },
-    { name: 'materialFiles', maxCount: 10 }
-]), async (req, res) => {
+// AI問題生成API（テキストのみ版）
+app.post('/api/generate', async (req, res) => {
     try {
         const { mode, subject, questionCount, difficulty, questionType, additionalText } = req.body;
-        const files = req.files;
 
         console.log(`処理開始: モード=${mode}, 教科=${subject}`);
 
-        let allFiles = [];
-        
-        if (files.files) {
-            allFiles = allFiles.concat(files.files);
-        }
-        if (files.pastExamFiles) {
-            allFiles = allFiles.concat(files.pastExamFiles);
-        }
-        if (files.materialFiles) {
-            allFiles = allFiles.concat(files.materialFiles);
-        }
-
-        if (allFiles.length === 0 && !additionalText) {
-            return res.status(400).json({ error: 'ファイルまたはテキストを入力してください' });
-        }
-
-        let fileContents = [];
-        
-        for (const file of allFiles) {
-            try {
-                const content = await readFileContent(file.path, file.mimetype);
-                fileContents.push({
-                    name: file.originalname,
-                    type: file.mimetype,
-                    content: content
-                });
-                
-                fs.unlinkSync(file.path);
-            } catch (error) {
-                console.error(`ファイル処理エラー (${file.originalname}):`, error);
-                try {
-                    fs.unlinkSync(file.path);
-                } catch (deleteError) {
-                    console.error('ファイル削除エラー:', deleteError);
-                }
-            }
-        }
-        
-        if (additionalText) {
-            fileContents.push({
-                name: '手動入力テキスト',
-                type: 'text/plain',
-                content: additionalText
-            });
-        }
-
-        if (fileContents.length === 0) {
-            return res.status(400).json({ error: 'ファイル内容の読み込みに失敗しました' });
+        if (!additionalText || additionalText.trim().length === 0) {
+            return res.status(400).json({ error: 'テキストを入力してください' });
         }
 
         const settings = {
@@ -425,7 +164,7 @@ app.post('/api/generate', upload.fields([
             questionType
         };
 
-        const prompt = createPrompt(fileContents, mode, settings);
+        const prompt = createPrompt(additionalText, mode, settings);
         console.log('OpenAI API呼び出し開始...');
 
         const completion = await openai.chat.completions.create({
@@ -469,7 +208,7 @@ app.post('/api/generate', upload.fields([
         } else if (error.code === 'rate_limit_exceeded') {
             res.status(429).json({ error: 'APIレート制限に達しました。しばらく待ってから再試行してください' });
         } else if (error.code === 'context_length_exceeded') {
-            res.status(400).json({ error: 'テキスト量が多すぎます。ファイル数や内容を減らしてください' });
+            res.status(400).json({ error: 'テキスト量が多すぎます。内容を減らしてください' });
         } else {
             res.status(500).json({ 
                 error: 'AI処理中にエラーが発生しました', 
@@ -563,7 +302,6 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
     console.log(`🚀 AI学習アプリサーバーが起動しました`);
     console.log(`🌐 http://localhost:${port}`);
-    console.log(`📁 ファイルアップロード対応: PDF, PNG, JPG, TXT`);
     console.log(`🤖 OpenAI API: 準備完了`);
-    console.log(`👁️ OCR機能: 改善版有効`);
+    console.log(`📝 テキスト入力モード: 有効`);
 });
