@@ -4,9 +4,6 @@ const API_BASE_URL = window.location.hostname === 'localhost'
     : '/api';
 
 // グローバル変数
-let uploadedFiles = [];
-let pastExamFiles = [];
-let materialFiles = [];
 let currentMode = 'review';
 let savedSubjects = [];
 let currentQuestionsData = [];
@@ -54,30 +51,13 @@ document.querySelectorAll('.mode-card').forEach(card => {
 function updateModeDisplay() {
     const reviewSettings = document.getElementById('reviewSettings');
     const yamabariSettings = document.getElementById('yamabariSettings');
-    const reviewUpload = document.getElementById('reviewUpload');
     
     if (currentMode === 'review') {
         reviewSettings.classList.remove('hide');
         yamabariSettings.classList.remove('show');
-        reviewUpload.style.display = 'block';
-        updateUploadAreaText();
     } else {
         reviewSettings.classList.add('hide');
         yamabariSettings.classList.add('show');
-        reviewUpload.style.display = 'none';
-    }
-}
-
-function updateUploadAreaText() {
-    const uploadArea = document.getElementById('reviewUpload');
-    const icon = uploadArea.querySelector('.upload-icon');
-    const title = uploadArea.querySelector('h3');
-    const desc = uploadArea.querySelector('p');
-
-    if (currentMode === 'review') {
-        icon.textContent = '📖';
-        title.textContent = '授業資料をアップロードしてください';
-        desc.textContent = 'PDF、画像（PNG、JPG）、テキストファイルに対応';
     }
 }
 
@@ -131,138 +111,25 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初期化
     loadSubjects();
-    
-    // 復習機能の初期化
-    setTimeout(() => {
-        initializeReviewHistory();
-    }, 200);
 });
-
-// ファイル処理
-const fileInput = document.getElementById('fileInput');
-const pastExamInput = document.getElementById('pastExamInput');
-const materialInput = document.getElementById('materialInput');
-const uploadArea = document.getElementById('reviewUpload');
-
-// 復習モード用ファイル処理
-fileInput.addEventListener('change', (e) => handleFiles(e, 'main'));
-
-// じっくり対策モード用ファイル処理
-pastExamInput.addEventListener('change', (e) => handleFiles(e, 'pastExam'));
-materialInput.addEventListener('change', (e) => handleFiles(e, 'material'));
-
-// ドラッグ&ドロップ（復習モード用）
-uploadArea.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    uploadArea.classList.add('dragover');
-});
-
-uploadArea.addEventListener('dragleave', () => {
-    uploadArea.classList.remove('dragover');
-});
-
-uploadArea.addEventListener('drop', (e) => {
-    e.preventDefault();
-    uploadArea.classList.remove('dragover');
-    handleFiles({ target: { files: e.dataTransfer.files } }, 'main');
-});
-
-function handleFiles(event, type) {
-    const files = Array.from(event.target.files);
-    
-    files.forEach(file => {
-        if (file.type.includes('text') || file.type.includes('pdf') || file.type.includes('image')) {
-            switch(type) {
-                case 'main':
-                    uploadedFiles.push(file);
-                    break;
-                case 'pastExam':
-                    pastExamFiles.push(file);
-                    break;
-                case 'material':
-                    materialFiles.push(file);
-                    break;
-            }
-        }
-    });
-    
-    updateFileList(type);
-    updateGenerateButton();
-}
-
-function updateFileList(type) {
-    let fileArray, listElement;
-    
-    switch(type) {
-        case 'main':
-            fileArray = uploadedFiles;
-            listElement = document.getElementById('fileList');
-            break;
-        case 'pastExam':
-            fileArray = pastExamFiles;
-            listElement = document.getElementById('pastExamList');
-            break;
-        case 'material':
-            fileArray = materialFiles;
-            listElement = document.getElementById('materialList');
-            break;
-    }
-    
-    listElement.innerHTML = '';
-    fileArray.forEach((file, index) => {
-        const fileItem = document.createElement('div');
-        fileItem.className = 'file-item';
-        fileItem.innerHTML = `
-            <div class="file-info">
-                <span class="file-icon">${getFileIcon(file.type)}</span>
-                <span>${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)</span>
-            </div>
-            <button class="remove-btn" onclick="removeFile('${type}', ${index})">削除</button>
-        `;
-        listElement.appendChild(fileItem);
-    });
-}
-
-function removeFile(type, index) {
-    switch(type) {
-        case 'main':
-            uploadedFiles.splice(index, 1);
-            break;
-        case 'pastExam':
-            pastExamFiles.splice(index, 1);
-            break;
-        case 'material':
-            materialFiles.splice(index, 1);
-            break;
-    }
-    
-    updateFileList(type);
-    updateGenerateButton();
-}
-
-function getFileIcon(type) {
-    if (type.includes('pdf')) return '📄';
-    if (type.includes('image')) return '🖼️';
-    if (type.includes('text')) return '📝';
-    return '📁';
-}
 
 function updateGenerateButton() {
     const generateBtn = document.getElementById('generateBtn');
+    const hasText = document.getElementById('additionalText').value.trim().length > 0;
     
     if (currentMode === 'review') {
-        // 復習モード：ファイルまたはテキストがあればOK
-        const hasFiles = uploadedFiles.length > 0;
-        const hasText = document.getElementById('additionalText').value.trim().length > 0;
-        generateBtn.disabled = !(hasFiles || hasText);
+        generateBtn.disabled = !hasText;
     } else {
-        // じっくり対策モード：過去問が必須
-        generateBtn.disabled = pastExamFiles.length === 0;
+        const hasSubject = document.getElementById('yamabariSubject').value.trim().length > 0;
+        generateBtn.disabled = !(hasText && hasSubject);
     }
 }
 
 // テキスト入力の監視
 document.getElementById('additionalText').addEventListener('input', updateGenerateButton);
+if (document.getElementById('yamabariSubject')) {
+    document.getElementById('yamabariSubject').addEventListener('input', updateGenerateButton);
+}
 
 function showError(message) {
     const errorDiv = document.getElementById('errorMessage');
@@ -362,6 +229,12 @@ function formatQuestionDisplay(question, showAnswer = false) {
 // AI問題生成
 async function generateContent() {
     // バリデーション
+    const additionalText = document.getElementById('additionalText').value.trim();
+    if (!additionalText) {
+        showError('テキストを入力してください');
+        return;
+    }
+
     if (currentMode === 'review') {
         const subjectSelect = document.getElementById('subjectSelect');
         const newSubjectInput = document.getElementById('newSubjectInput');
@@ -370,17 +243,7 @@ async function generateContent() {
             showError('教科名を入力してください');
             return;
         }
-        
-        if (uploadedFiles.length === 0 && !document.getElementById('additionalText').value.trim()) {
-            showError('ファイルをアップロードするか、テキストを入力してください');
-            return;
-        }
     } else {
-        if (pastExamFiles.length === 0) {
-            showError('過去問ファイルをアップロードしてください');
-            return;
-        }
-        
         if (!document.getElementById('yamabariSubject').value.trim()) {
             showError('教科名を入力してください');
             return;
@@ -396,8 +259,10 @@ async function generateContent() {
     generateBtn.disabled = true;
 
     try {
-        const formData = new FormData();
-        formData.append('mode', currentMode);
+        const requestData = {
+            mode: currentMode,
+            additionalText: additionalText
+        };
         
         // 設定情報を送信
         if (currentMode === 'review') {
@@ -405,43 +270,25 @@ async function generateContent() {
                 ? document.getElementById('newSubjectInput').value.trim()
                 : document.getElementById('subjectSelect').value;
             
-            formData.append('subject', subject);
-            formData.append('questionCount', document.getElementById('questionCount').value);
-            formData.append('difficulty', document.getElementById('difficulty').value);
-            formData.append('questionType', document.getElementById('questionType').value);
-            
-            // ファイル追加
-            uploadedFiles.forEach((file) => {
-                formData.append('files', file);
-            });
+            requestData.subject = subject;
+            requestData.questionCount = document.getElementById('questionCount').value;
+            requestData.difficulty = document.getElementById('difficulty').value;
+            requestData.questionType = document.getElementById('questionType').value;
         } else {
-            formData.append('subject', document.getElementById('yamabariSubject').value.trim());
-            formData.append('questionCount', document.getElementById('yamabariQuestionCount').value);
-            formData.append('difficulty', document.getElementById('yamabaridifficulty').value);
-            formData.append('questionType', document.getElementById('yamabariQuestionType').value);
-            
-            // 過去問ファイル
-            pastExamFiles.forEach((file) => {
-                formData.append('pastExamFiles', file);
-            });
-            
-            // 教材ファイル（任意）
-            materialFiles.forEach((file) => {
-                formData.append('materialFiles', file);
-            });
-        }
-        
-        // 追加テキスト
-        const additionalText = document.getElementById('additionalText').value.trim();
-        if (additionalText) {
-            formData.append('additionalText', additionalText);
+            requestData.subject = document.getElementById('yamabariSubject').value.trim();
+            requestData.questionCount = document.getElementById('yamabariQuestionCount').value;
+            requestData.difficulty = document.getElementById('yamabaridifficulty').value;
+            requestData.questionType = document.getElementById('yamabariQuestionType').value;
         }
 
         console.log('サーバーに送信中...');
         
         const response = await fetch(`${API_BASE_URL}/generate`, {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
         });
 
         if (!response.ok) {
@@ -454,9 +301,6 @@ async function generateContent() {
 
         if (result.success) {
             showResults(result.data, currentMode);
-            
-            // LocalStorageに履歴保存
-            saveQuizHistory(result.data);
         } else {
             throw new Error(result.error || '不明なエラーが発生しました');
         }
@@ -468,36 +312,6 @@ async function generateContent() {
         loading.classList.remove('show');
         generateBtn.disabled = false;
     }
-}
-
-function saveQuizHistory(data) {
-    if (currentMode !== 'review') return;
-    
-    const subject = document.getElementById('subjectSelect').value === 'new' 
-        ? document.getElementById('newSubjectInput').value.trim()
-        : document.getElementById('subjectSelect').value;
-    
-    const historyData = {
-        id: 'quiz_' + Date.now(),
-        timestamp: new Date().toISOString(),
-        subject: subject,
-        mode: currentMode,
-        settings: {
-            questionCount: document.getElementById('questionCount').value,
-            difficulty: document.getElementById('difficulty').value,
-            questionType: document.getElementById('questionType').value
-        },
-        data: data
-    };
-    
-    const existingHistory = JSON.parse(localStorage.getItem('sakumon_quiz_history') || '[]');
-    existingHistory.push(historyData);
-    
-    if (existingHistory.length > 50) {
-        existingHistory.splice(0, existingHistory.length - 50);
-    }
-    
-    localStorage.setItem('sakumon_quiz_history', JSON.stringify(existingHistory));
 }
 
 function showResults(data, mode) {
@@ -595,520 +409,3 @@ function showResults(data, mode) {
         document.querySelectorAll('.result-panel').forEach(panel => panel.classList.remove('active'));
         document.querySelector('.result-tab[data-tab="questions"]').classList.add('active');
         document.getElementById('questionsPanel').classList.add('active');
-        
-    } catch (error) {
-        console.error('結果表示エラー:', error);
-        showError('結果の表示中にエラーが発生しました');
-    }
-}
-
-// 解説の折りたたみ機能
-function toggleExplanation(index) {
-    const explanationElement = document.getElementById(`explanation-${index}`);
-    const toggleButton = document.querySelector(`.explanation-toggle[onclick="toggleExplanation(${index})"]`);
-    
-    if (explanationElement.classList.contains('show')) {
-        explanationElement.classList.remove('show');
-        toggleButton.textContent = '💡 解説を見る';
-        toggleButton.classList.remove('active');
-    } else {
-        explanationElement.classList.add('show');
-        toggleButton.textContent = '📖 解説を閉じる';
-        toggleButton.classList.add('active');
-        
-        // 解説表示時に四択問題の答えをハイライト
-        const questionContentElement = document.getElementById(`question-content-${index}`);
-        if (questionContentElement && currentQuestionsData[index]) {
-            const updatedContent = formatQuestionDisplay(currentQuestionsData[index], true);
-            questionContentElement.innerHTML = updatedContent;
-        }
-    }
-}
-
-// AI質問機能
-function toggleAIChat() {
-    const chatPanel = document.getElementById('aiChatPanel');
-    aiChatOpen = !aiChatOpen;
-    
-    if (aiChatOpen) {
-        chatPanel.classList.add('show');
-        document.getElementById('aiChatInput').focus();
-    } else {
-        chatPanel.classList.remove('show');
-    }
-}
-
-async function sendAIQuestion() {
-    const input = document.getElementById('aiChatInput');
-    const question = input.value.trim();
-    
-    if (!question) return;
-    
-    const messagesDiv = document.getElementById('aiChatMessages');
-    
-    // ユーザーの質問を表示
-    const userMessage = document.createElement('div');
-    userMessage.className = 'ai-message user';
-    userMessage.textContent = question;
-    messagesDiv.appendChild(userMessage);
-    
-    // 入力欄をクリア
-    input.value = '';
-    
-    // AI応答を生成中表示
-    const thinkingMessage = document.createElement('div');
-    thinkingMessage.className = 'ai-message ai';
-    thinkingMessage.textContent = '考え中...';
-    messagesDiv.appendChild(thinkingMessage);
-    
-    // 自動スクロール
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/ai-question`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                question: question,
-                context: currentQuestionsData // 現在の問題データを文脈として送信
-            })
-        });
-        
-        const result = await response.json();
-        
-        // 考え中メッセージを削除
-        messagesDiv.removeChild(thinkingMessage);
-        
-        // AI応答を表示
-        const aiMessage = document.createElement('div');
-        aiMessage.className = 'ai-message ai';
-        aiMessage.textContent = result.answer || 'すみません、回答を生成できませんでした。';
-        messagesDiv.appendChild(aiMessage);
-        
-    } catch (error) {
-        console.error('AI質問エラー:', error);
-        
-        // 考え中メッセージを削除
-        messagesDiv.removeChild(thinkingMessage);
-        
-        // エラーメッセージ表示
-        const errorMessage = document.createElement('div');
-        errorMessage.className = 'ai-message ai';
-        errorMessage.textContent = 'すみません、現在AI機能が利用できません。しばらく後でお試しください。';
-        messagesDiv.appendChild(errorMessage);
-    }
-    
-    // 自動スクロール
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
-
-// Enterキーで送信
-document.getElementById('aiChatInput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        sendAIQuestion();
-    }
-});
-
-// もっかい読解（復習復習機能）
-function loadQuizHistory() {
-    const history = JSON.parse(localStorage.getItem('sakumon_quiz_history') || '[]');
-    return history.filter(item => item.mode === 'review');
-}
-
-function getSubjectHistory(subject) {
-    const history = loadQuizHistory();
-    return history.filter(item => item.subject === subject);
-}
-
-function getAllSubjectsFromHistory() {
-    const history = loadQuizHistory();
-    const subjects = [...new Set(history.map(item => item.subject))];
-    return subjects;
-}
-
-function createReviewHistorySection() {
-    const mainContent = document.querySelector('.main-content');
-    
-    const reviewSection = document.createElement('div');
-    reviewSection.className = 'review-history-section';
-    reviewSection.style.marginTop = '30px';
-    reviewSection.innerHTML = `
-        <div class="settings-panel">
-            <h3>📚 もっかい読解 - 過去の学習から再出題</h3>
-            <p class="info-text">過去に作成した問題から、教科別に復習問題を再出題します</p>
-            
-            <div class="review-history-controls" style="margin-bottom: 20px;">
-                <div class="settings-grid">
-                    <div class="setting-group">
-                        <label for="historySubjectSelect">復習する教科を選択:</label>
-                        <select id="historySubjectSelect">
-                            <option value="">教科を選択してください</option>
-                        </select>
-                    </div>
-                    
-                    <div class="setting-group">
-                        <label for="reviewQuestionCount">出題数:</label>
-                        <select id="reviewQuestionCount">
-                            <option value="3">3問</option>
-                            <option value="5" selected>5問</option>
-                            <option value="10">10問</option>
-                            <option value="all">全問題</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="history-stats" id="historyStats"></div>
-            
-            <button class="generate-btn" id="startReviewBtn" onclick="startReviewSession()" disabled>
-                📄 復習を開始
-            </button>
-        </div>
-        
-        <div class="review-results-container" id="reviewResults" style="display: none; margin-top: 20px;">
-            <div class="results-tabs">
-                <button class="result-tab active" data-tab="reviewQuestions">📝 復習問題</button>
-                <button class="result-tab" data-tab="reviewStats">📊 学習統計</button>
-            </div>
-            
-            <div class="results-content">
-                <div class="result-panel active" id="reviewQuestionsPanel">
-                    <div class="result-section">
-                        <h3>📝 復習問題</h3>
-                        <div id="reviewQuestionsContent"></div>
-                    </div>
-                </div>
-                
-                <div class="result-panel" id="reviewStatsPanel">
-                    <div class="result-section">
-                        <h3>📊 学習統計</h3>
-                        <div id="reviewStatsContent"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    const resultsContainer = document.getElementById('results');
-    resultsContainer.parentNode.insertBefore(reviewSection, resultsContainer.nextSibling);
-}
-
-function initializeReviewHistory() {
-    createReviewHistorySection();
-    populateHistorySubjects();
-    setupHistoryEventListeners();
-}
-
-function populateHistorySubjects() {
-    const subjects = getAllSubjectsFromHistory();
-    const select = document.getElementById('historySubjectSelect');
-    
-    select.innerHTML = '<option value="">教科を選択してください</option>';
-    
-    subjects.forEach(subject => {
-        const option = document.createElement('option');
-        option.value = subject;
-        option.textContent = subject;
-        select.appendChild(option);
-    });
-    
-    if (subjects.length === 0) {
-        select.innerHTML = '<option value="">まだ学習履歴がありません</option>';
-    }
-}
-
-function setupHistoryEventListeners() {
-    document.getElementById('historySubjectSelect').addEventListener('change', function() {
-        const subject = this.value;
-        updateHistoryStats(subject);
-        updateReviewButton();
-    });
-    
-    document.getElementById('reviewMode').addEventListener('change', function() {
-        updateReviewButton();
-    });
-    
-    document.addEventListener('click', function(e) {
-        if (e.target.classList.contains('result-tab') && 
-            (e.target.dataset.tab === 'reviewQuestions' || e.target.dataset.tab === 'reviewStats')) {
-            switchReviewTab(e.target.dataset.tab);
-        }
-    });
-}
-
-function updateHistoryStats(subject) {
-    const statsDiv = document.getElementById('historyStats');
-    
-    if (!subject) {
-        statsDiv.innerHTML = '';
-        return;
-    }
-    
-    const subjectHistory = getSubjectHistory(subject);
-    const totalSessions = subjectHistory.length;
-    const totalQuestions = subjectHistory.reduce((sum, session) => {
-        return sum + (session.data.questions ? session.data.questions.length : 0);
-    }, 0);
-    
-    const lastStudy = subjectHistory.length > 0 
-        ? new Date(subjectHistory[subjectHistory.length - 1].timestamp).toLocaleDateString('ja-JP')
-        : 'なし';
-    
-    statsDiv.innerHTML = `
-        <div class="stats-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 15px 0; padding: 15px; background: #f0f8ff; border-radius: 8px;">
-            <div class="stat-item" style="text-align: center;">
-                <div style="font-size: 1.5rem; font-weight: bold; color: #3498db;">${totalSessions}</div>
-                <div style="font-size: 0.9rem; color: #666;">学習セッション</div>
-            </div>
-            <div class="stat-item" style="text-align: center;">
-                <div style="font-size: 1.5rem; font-weight: bold; color: #27ae60;">${totalQuestions}</div>
-                <div style="font-size: 0.9rem; color: #666;">累計問題数</div>
-            </div>
-            <div class="stat-item" style="text-align: center;">
-                <div style="font-size: 1rem; font-weight: bold; color: #e74c3c;">${lastStudy}</div>
-                <div style="font-size: 0.9rem; color: #666;">最終学習日</div>
-            </div>
-        </div>
-    `;
-}
-
-function updateReviewButton() {
-    const startReviewBtn = document.getElementById('startReviewBtn');
-    const subject = document.getElementById('historySubjectSelect').value;
-    
-    startReviewBtn.disabled = !subject;
-}
-
-function startReviewSession() {
-    const subject = document.getElementById('historySubjectSelect').value;
-    const reviewMode = document.getElementById('reviewMode').value;
-    const questionCount = document.getElementById('reviewQuestionCount').value;
-    
-    if (!subject) {
-        showError('教科を選択してください');
-        return;
-    }
-    
-    try {
-        const questions = prepareReviewQuestions(subject, reviewMode, questionCount);
-        
-        if (questions.length === 0) {
-            showError('復習可能な問題が見つかりませんでした');
-            return;
-        }
-        
-        displayReviewQuestions(questions, subject);
-        updateReviewStats(subject, questions.length);
-        
-    } catch (error) {
-        console.error('復習セッション開始エラー:', error);
-        showError('復習セッションの開始中にエラーが発生しました');
-    }
-}
-
-function prepareReviewQuestions(subject, reviewMode, questionCount) {
-    let allQuestions = [];
-    
-    const subjectHistory = getSubjectHistory(subject);
-    subjectHistory.forEach(session => {
-        if (session.data.questions) {
-            session.data.questions.forEach(q => {
-                allQuestions.push({
-                    ...q,
-                    sessionId: session.id,
-                    sessionDate: session.timestamp
-                });
-            });
-        }
-    });
-    
-    let selectedQuestions = [];
-    
-    switch (reviewMode) {
-        case 'latest':
-            allQuestions.sort((a, b) => new Date(b.sessionDate) - new Date(a.sessionDate));
-            selectedQuestions = allQuestions.slice(0, questionCount === 'all' ? allQuestions.length : parseInt(questionCount));
-            break;
-            
-        case 'random':
-            selectedQuestions = shuffleArray([...allQuestions]);
-            if (questionCount !== 'all') {
-                selectedQuestions = selectedQuestions.slice(0, parseInt(questionCount));
-            }
-            break;
-            
-        case 'all':
-        default:
-            selectedQuestions = allQuestions;
-            if (questionCount !== 'all') {
-                selectedQuestions = selectedQuestions.slice(0, parseInt(questionCount));
-            }
-            break;
-    }
-    
-    return selectedQuestions;
-}
-
-function shuffleArray(array) {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-}
-
-let currentReviewQuestionsData = [];
-
-function displayReviewQuestions(questions, subject) {
-    currentReviewQuestionsData = questions;
-    
-    const reviewResults = document.getElementById('reviewResults');
-    const questionsContent = document.getElementById('reviewQuestionsContent');
-    
-    let questionsHtml = `
-        <div class="review-header" style="background: linear-gradient(135deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-            <h3 style="margin: 0; color: white;">📚 ${subject} - 復習セッション</h3>
-            <p style="margin: 5px 0 0 0; opacity: 0.9;">出題数: ${questions.length}問</p>
-        </div>
-    `;
-    
-    questions.forEach((q, i) => {
-        const sessionDate = new Date(q.sessionDate).toLocaleDateString('ja-JP');
-        const formattedQuestion = formatQuestionDisplay(q, false);
-        const questionIcon = q.question.includes('A)') ? '📝' : '✏️';
-        
-        questionsHtml += `
-            <div class="question">
-                <div class="question-header">
-                    <div class="question-title">${questionIcon} 復習問題 ${i + 1}</div>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <span style="font-size: 0.8rem; color: #666; background: #f0f0f0; padding: 4px 8px; border-radius: 12px;">
-                            ${sessionDate}
-                        </span>
-                        <button class="explanation-toggle" onclick="toggleReviewExplanation(${i})">
-                            💡 解説を見る
-                        </button>
-                    </div>
-                </div>
-                <div class="question-content" id="review-question-content-${i}">
-                    ${formattedQuestion}
-                </div>
-                <div class="explanation-content" id="reviewExplanation-${i}">
-                    <h4>解答・解説</h4>
-                    <div style="background: #e8f5e8; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
-                        <p><strong>🎯 正解:</strong> ${q.answer}</p>
-                    </div>
-                    <div style="background: #f0f8ff; padding: 12px; border-radius: 6px;">
-                        <p><strong>📚 解説:</strong> ${q.explanation}</p>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    questionsContent.innerHTML = questionsHtml;
-    reviewResults.style.display = 'block';
-    
-    switchReviewTab('reviewQuestions');
-    reviewResults.scrollIntoView({ behavior: 'smooth' });
-}
-
-function toggleReviewExplanation(index) {
-    const explanationElement = document.getElementById(`reviewExplanation-${index}`);
-    const toggleButton = document.querySelector(`.explanation-toggle[onclick="toggleReviewExplanation(${index})"]`);
-    
-    if (explanationElement.classList.contains('show')) {
-        explanationElement.classList.remove('show');
-        toggleButton.textContent = '💡 解説を見る';
-        toggleButton.classList.remove('active');
-    } else {
-        explanationElement.classList.add('show');
-        toggleButton.textContent = '📖 解説を閉じる';
-        toggleButton.classList.add('active');
-        
-        const questionContentElement = document.getElementById(`review-question-content-${index}`);
-        if (questionContentElement && currentReviewQuestionsData[index]) {
-            const updatedContent = formatQuestionDisplay(currentReviewQuestionsData[index], true);
-            questionContentElement.innerHTML = updatedContent;
-        }
-    }
-}
-
-function switchReviewTab(tabName) {
-    document.querySelectorAll('[data-tab="reviewQuestions"], [data-tab="reviewStats"]').forEach(tab => {
-        tab.classList.remove('active');
-        if (tab.dataset.tab === tabName) {
-            tab.classList.add('active');
-        }
-    });
-    
-    const questionsPanel = document.getElementById('reviewQuestionsPanel');
-    const statsPanel = document.getElementById('reviewStatsPanel');
-    
-    if (tabName === 'reviewQuestions') {
-        questionsPanel.classList.add('active');
-        statsPanel.classList.remove('active');
-    } else {
-        questionsPanel.classList.remove('active');
-        statsPanel.classList.add('active');
-    }
-}
-
-function updateReviewStats(subject, questionCount) {
-    const statsContent = document.getElementById('reviewStatsContent');
-    const subjectHistory = getSubjectHistory(subject);
-    
-    const totalSessions = subjectHistory.length;
-    const totalQuestions = subjectHistory.reduce((sum, session) => {
-        return sum + (session.data.questions ? session.data.questions.length : 0);
-    }, 0);
-    
-    statsContent.innerHTML = `
-        <div class="stats-dashboard">
-            <div class="stats-row" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px;">
-                <div class="stat-card" style="background: linear-gradient(135deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; text-align: center;">
-                    <div style="font-size: 2rem; font-weight: bold;">${questionCount}</div>
-                    <div>今回の復習問題数</div>
-                </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #27ae60, #2ecc71); color: white; padding: 20px; border-radius: 10px; text-align: center;">
-                    <div style="font-size: 2rem; font-weight: bold;">${totalSessions}</div>
-                    <div>総学習セッション</div>
-                </div>
-            </div>
-            
-            <div class="progress-section" style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
-                <h4 style="color: #2c3e50; margin-bottom: 15px;">📈 学習進度</h4>
-                <div class="progress-item" style="margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span>復習完了率</span>
-                        <span>${Math.round((questionCount / Math.max(totalQuestions, 1)) * 100)}%</span>
-                    </div>
-                    <div style="background: #e9ecef; height: 8px; border-radius: 4px; overflow: hidden;">
-                        <div style="background: linear-gradient(135deg, #3498db, #2980b9); height: 100%; width: ${Math.round((questionCount / Math.max(totalQuestions, 1)) * 100)}%; transition: width 0.5s ease;"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <div style="background: linear-gradient(135deg, #f39c12, #e67e22); color: white; padding: 15px; border-radius: 10px; text-align: center; margin-top: 20px;">
-                <strong>🎉 お疲れ様でした！</strong><br>
-                継続的な復習が学習効果を高めます。
-            </div>
-        </div>
-    `;
-}
-
-// 初期化
-updateModeDisplay();
-updateGenerateButton();Mode">復習モード:</label>
-                        <select id="reviewMode">
-                            <option value="latest">最新のセッション</option>
-                            <option value="random">ランダム出題</option>
-                            <option value="all">全問題から出題</option>
-                        </select>
-                    </div>
-                    
-                    <div class="setting-group">
-                        <label for="review
