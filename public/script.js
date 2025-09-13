@@ -409,3 +409,122 @@ function showResults(data, mode) {
         document.querySelectorAll('.result-panel').forEach(panel => panel.classList.remove('active'));
         document.querySelector('.result-tab[data-tab="questions"]').classList.add('active');
         document.getElementById('questionsPanel').classList.add('active');
+        
+    } catch (error) {
+        console.error('結果表示エラー:', error);
+        showError('結果の表示中にエラーが発生しました');
+    }
+}
+
+// 解説の折りたたみ機能
+function toggleExplanation(index) {
+    const explanationElement = document.getElementById(`explanation-${index}`);
+    const toggleButton = document.querySelector(`.explanation-toggle[onclick="toggleExplanation(${index})"]`);
+    
+    if (explanationElement.classList.contains('show')) {
+        explanationElement.classList.remove('show');
+        toggleButton.textContent = '💡 解説を見る';
+        toggleButton.classList.remove('active');
+    } else {
+        explanationElement.classList.add('show');
+        toggleButton.textContent = '📖 解説を閉じる';
+        toggleButton.classList.add('active');
+        
+        // 解説表示時に四択問題の答えをハイライト
+        const questionContentElement = document.getElementById(`question-content-${index}`);
+        if (questionContentElement && currentQuestionsData[index]) {
+            const updatedContent = formatQuestionDisplay(currentQuestionsData[index], true);
+            questionContentElement.innerHTML = updatedContent;
+        }
+    }
+}
+
+// AI質問機能
+function toggleAIChat() {
+    const chatPanel = document.getElementById('aiChatPanel');
+    aiChatOpen = !aiChatOpen;
+    
+    if (aiChatOpen) {
+        chatPanel.classList.add('show');
+        document.getElementById('aiChatInput').focus();
+    } else {
+        chatPanel.classList.remove('show');
+    }
+}
+
+async function sendAIQuestion() {
+    const input = document.getElementById('aiChatInput');
+    const question = input.value.trim();
+    
+    if (!question) return;
+    
+    const messagesDiv = document.getElementById('aiChatMessages');
+    
+    // ユーザーの質問を表示
+    const userMessage = document.createElement('div');
+    userMessage.className = 'ai-message user';
+    userMessage.textContent = question;
+    messagesDiv.appendChild(userMessage);
+    
+    // 入力欄をクリア
+    input.value = '';
+    
+    // AI応答を生成中表示
+    const thinkingMessage = document.createElement('div');
+    thinkingMessage.className = 'ai-message ai';
+    thinkingMessage.textContent = '考え中...';
+    messagesDiv.appendChild(thinkingMessage);
+    
+    // 自動スクロール
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/ai-question`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                question: question,
+                context: currentQuestionsData // 現在の問題データを文脈として送信
+            })
+        });
+        
+        const result = await response.json();
+        
+        // 考え中メッセージを削除
+        messagesDiv.removeChild(thinkingMessage);
+        
+        // AI応答を表示
+        const aiMessage = document.createElement('div');
+        aiMessage.className = 'ai-message ai';
+        aiMessage.textContent = result.answer || 'すみません、回答を生成できませんでした。';
+        messagesDiv.appendChild(aiMessage);
+        
+    } catch (error) {
+        console.error('AI質問エラー:', error);
+        
+        // 考え中メッセージを削除
+        messagesDiv.removeChild(thinkingMessage);
+        
+        // エラーメッセージ表示
+        const errorMessage = document.createElement('div');
+        errorMessage.className = 'ai-message ai';
+        errorMessage.textContent = 'すみません、現在AI機能が利用できません。しばらく後でお試しください。';
+        messagesDiv.appendChild(errorMessage);
+    }
+    
+    // 自動スクロール
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// Enterキーで送信
+document.getElementById('aiChatInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        sendAIQuestion();
+    }
+});
+
+// 初期化
+updateModeDisplay();
+updateGenerateButton();
